@@ -49,7 +49,7 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260708s"
+APP_VERSION = "20260708t"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
 CACHE_TTL_SECONDS = 600
@@ -282,18 +282,26 @@ MOBILE_FRAME_CSS = """
     display: none !important;
     height: 0 !important;
 }
+/* 탭 버튼 — Streamlit Cloud( div[stTab] ) + 구버전( button baseweb ) 공통 */
+[data-testid="stTabs"] [role="tablist"] > [role="tab"],
+[data-testid="stTabs"] [data-testid="stTab"],
 [data-testid="stTabs"] button[role="tab"],
 [data-testid="stTabs"] button[data-baseweb="tab"],
 [data-testid="stTabs"] [data-baseweb="tab"] {
     flex: 1 1 0 !important;
+    flex-grow: 1 !important;
     flex-shrink: 1 !important;
+    flex-basis: 0 !important;
     min-width: 0 !important;
     max-width: none !important;
-    width: 100% !important;
+    width: auto !important;
     height: auto !important;
     min-height: 36px !important;
     padding: 9px 2px 11px 2px !important;
     margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     font-size: 0.6875rem !important;
     font-weight: 600 !important;
@@ -303,7 +311,6 @@ MOBILE_FRAME_CSS = """
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     text-align: center !important;
-    justify-content: center !important;
     color: #8b95a1 !important;
     background: transparent !important;
     border: none !important;
@@ -312,10 +319,20 @@ MOBILE_FRAME_CSS = """
     box-shadow: none !important;
     cursor: pointer !important;
     -webkit-tap-highlight-color: transparent !important;
+    box-sizing: border-box !important;
 }
+[data-testid="stTabs"] [data-testid="stTab"] [data-testid="stMarkdownContainer"],
+[data-testid="stTabs"] [role="tablist"] > [role="tab"] [data-testid="stMarkdownContainer"] {
+    width: 100% !important;
+    text-align: center !important;
+}
+[data-testid="stTabs"] [data-testid="stTab"] p,
+[data-testid="stTabs"] [role="tablist"] > [role="tab"] p,
 [data-testid="stTabs"] button[role="tab"] p,
 [data-testid="stTabs"] button[data-baseweb="tab"] p,
 [data-testid="stTabs"] [data-baseweb="tab"] p,
+[data-testid="stTabs"] [data-testid="stTab"] span,
+[data-testid="stTabs"] [role="tablist"] > [role="tab"] span,
 [data-testid="stTabs"] button[role="tab"] span,
 [data-testid="stTabs"] button[data-baseweb="tab"] span,
 [data-testid="stTabs"] [data-baseweb="tab"] span {
@@ -332,6 +349,8 @@ MOBILE_FRAME_CSS = """
     letter-spacing: inherit !important;
     color: inherit !important;
 }
+[data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"],
+[data-testid="stTabs"] [role="tablist"] > [role="tab"][aria-selected="true"],
 [data-testid="stTabs"] button[role="tab"][aria-selected="true"],
 [data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"],
 [data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
