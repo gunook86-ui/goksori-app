@@ -20,9 +20,9 @@ import streamlit as st
 sys.modules.pop("member_auth", None)
 sys.modules.pop("accuracy_badge", None)
 sys.modules.pop("stock_votes", None)
+sys.modules.pop("betting_ui", None)
 sys.modules.pop("vote_settlement", None)
 sys.modules.pop("member_profile", None)
-sys.modules.pop("betting_ui", None)
 from member_auth import (
     MEMBER_GATE_CSS,
     MEMBER_VOTE_LOCK_KEY,
@@ -71,7 +71,7 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260710b"
+APP_VERSION = "20260710d"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
 CACHE_TTL_SECONDS = 600
@@ -820,21 +820,24 @@ MOBILE_CSS = """
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
-        min-height: 5.25rem !important;
+        min-height: 3.125rem !important;
+        height: 3.125rem !important;
+        max-height: 3.25rem !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
-        font-size: 1.3125rem !important;
+        font-size: 1.0625rem !important;
         font-weight: 800 !important;
-        padding: 18px 16px !important;
-        border-radius: 16px !important;
+        padding: 9px 14px !important;
+        border-radius: 12px !important;
         border: 2px solid #D1D6DB !important;
         background: #FFFFFF !important;
         color: #191F28 !important;
         box-shadow: none !important;
-        margin: 0 0 10px 0 !important;
+        margin: 0 0 6px 0 !important;
         white-space: nowrap !important;
+        line-height: 1.2 !important;
     }
     [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="primary"],
     [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="primary"] {

@@ -47,7 +47,7 @@ CPR_TOUCHED_KEY = MEMBER_CPR_TOUCH_KEY
 CPR_LIKED_KEY = "cpr_liked_post_ids"
 CPR_COMMENT_OPEN_KEY = "cpr_comment_open_post_id"
 
-CPR_UI_BUILD = "native-v16"
+CPR_UI_BUILD = "native-v17"
 
 CPR_ROOM_CSS = """
 <style>
@@ -60,7 +60,7 @@ CPR_ROOM_CSS = """
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04) !important;
 }
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-feed-card) {
-    padding: 14px 16px 18px 16px !important;
+    padding: 12px 14px 14px 14px !important;
     overflow: visible !important;
     width: 100% !important;
     box-sizing: border-box !important;
@@ -77,7 +77,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-feed-card)
   [data-testid="stHorizontalBlock"] {
     width: 100% !important;
     max-width: 100% !important;
-    gap: 8px !important;
+    gap: 6px !important;
     margin: 0 !important;
     align-items: stretch !important;
 }
@@ -103,6 +103,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-feed-card)
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
+    padding: 0 !important;
 }
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-feed-card)
   div[data-testid="stVerticalBlock"]:has(.cpr-feed-actions)
@@ -110,14 +111,15 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-feed-card)
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-    min-height: 2.875rem !important;
-    height: 2.875rem !important;
-    padding: 0 12px !important;
-    border-radius: 12px !important;
+    min-height: 2.25rem !important;
+    height: 2.25rem !important;
+    max-height: 2.25rem !important;
+    padding: 0 10px !important;
+    border-radius: 10px !important;
     border: 1.5px solid #D1D6DB !important;
     background: #FFFFFF !important;
     color: #333D4B !important;
-    font-size: 0.8125rem !important;
+    font-size: 0.75rem !important;
     font-weight: 700 !important;
     box-shadow: none !important;
     line-height: 1 !important;
