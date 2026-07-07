@@ -14,7 +14,7 @@ import sys as _sys
 _sys.modules.pop("member_auth", None)
 _sys.modules.pop("accuracy_badge", None)
 _sys.modules.pop("member_profile", None)
-_sys.modules.pop("vote_settlement", None)
+_sys.modules.pop("stock_votes", None)
 
 from member_auth import (
     MEMBER_CPR_TOUCH_KEY,

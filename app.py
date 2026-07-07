@@ -21,7 +21,6 @@ sys.modules.pop("member_auth", None)
 sys.modules.pop("accuracy_badge", None)
 sys.modules.pop("stock_votes", None)
 sys.modules.pop("betting_ui", None)
-sys.modules.pop("vote_settlement", None)
 sys.modules.pop("member_profile", None)
 from member_auth import (
     MEMBER_GATE_CSS,
@@ -38,22 +37,21 @@ from member_auth import (
 )
 from stock_votes import (
     add_stock_vote,
-    get_stock_vote_counts,
-    get_user_stock_vote,
-    is_trading_vote_open,
-    is_vote_locked_for_stock,
-    set_vote_locked_for_stock,
-)
-from member_profile import maybe_show_profile_dialog
-from vote_settlement import (
     format_target_date_label,
     format_vote_panel_title,
     get_member_pending_vote,
     get_open_vote_date,
+    get_stock_vote_counts,
+    get_user_stock_vote,
     get_vote_target_date,
+    init_vote_ledger,
+    is_trading_vote_open,
+    is_vote_locked_for_stock,
     process_vote_settlements,
     queue_member_vote,
+    set_vote_locked_for_stock,
 )
+from member_profile import maybe_show_profile_dialog
 from accuracy_badge import (
     get_member_badge,
     inject_accuracy_badge_css,
@@ -71,7 +69,7 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260710d"
+APP_VERSION = "20260710e"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
 CACHE_TTL_SECONDS = 600
@@ -2408,8 +2406,6 @@ def run_app() -> None:
     maybe_show_profile_dialog()
     user = st.session_state.get("member_user")
     if isinstance(user, dict) and user.get("email"):
-        from vote_settlement import init_vote_ledger
-
         sync_accuracy_from_ledger(
             init_vote_ledger(),
             user_email=str(user.get("email", "")),

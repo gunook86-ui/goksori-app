@@ -415,7 +415,7 @@ def sync_accuracy_from_ledger(
     init_vote_accuracy_session()
     store = st.session_state[VOTE_ACCURACY_KEY]
     if ledger is None:
-        from vote_settlement import init_vote_ledger
+        from stock_votes import init_vote_ledger
 
         ledger = init_vote_ledger()
     email = str(user_email or "").strip()
@@ -459,7 +459,7 @@ def ensure_member_accuracy_profile(user: dict[str, Any] | None) -> dict[str, Any
     store = st.session_state[VOTE_ACCURACY_KEY]
     email = str((user or {}).get("email", "")).strip()
     if email:
-        from vote_settlement import get_member_settled_history, init_vote_ledger
+        from stock_votes import get_member_settled_history, init_vote_ledger
 
         init_vote_ledger()
         settled = get_member_settled_history(user)
@@ -725,7 +725,7 @@ def _render_vote_timeline_row(item: dict[str, Any]) -> None:
     """최근 투표 이력 — 타임라인 한 줄."""
     from datetime import date
 
-    from vote_settlement import format_korean_date_label
+    from stock_votes import format_korean_date_label
 
     try:
         session_d = date.fromisoformat(str(item.get("date", "")))
@@ -781,7 +781,7 @@ def render_trader_profile_ui(
 
     if show_last_vote_cta:
         hint = "탭하면 상세 결과" if last_vote_label not in ("—", "") else "정산 후 표시"
-        from vote_settlement import request_last_vote_dialog
+        from stock_votes import request_last_vote_dialog
 
         if st.button(
             f"전날 투표 결과 · {last_vote_label}",
@@ -805,7 +805,7 @@ def render_trader_profile_ui(
 def render_member_tier_profile(user: dict[str, Any] | None) -> None:
     """내 프로필 — 투표 패널 상단 (통합 규격)."""
     from member_auth import get_member_display_name
-    from vote_settlement import (
+    from stock_votes import (
         format_last_vote_result,
         get_last_settled_vote,
         maybe_show_last_vote_dialog,
