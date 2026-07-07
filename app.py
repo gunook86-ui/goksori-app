@@ -18,26 +18,48 @@ import plotly.graph_objects as go
 import streamlit as st
 
 sys.modules.pop("member_auth", None)
+sys.modules.pop("accuracy_badge", None)
+sys.modules.pop("stock_votes", None)
+sys.modules.pop("vote_settlement", None)
+sys.modules.pop("member_profile", None)
+sys.modules.pop("betting_ui", None)
 from member_auth import (
     MEMBER_GATE_CSS,
     MEMBER_VOTE_LOCK_KEY,
     init_member_session,
     is_member,
+    is_member_ready,
+    needs_nickname_setup,
     render_compact_kakao_cta,
     render_member_gate,
+    render_social_login_banner,
+    ensure_nickname_setup_flow,
     show_vote_gate_if_needed,
 )
 from stock_votes import (
     add_stock_vote,
     get_stock_vote_counts,
+    get_user_stock_vote,
+    is_trading_vote_open,
     is_vote_locked_for_stock,
     set_vote_locked_for_stock,
+)
+from member_profile import maybe_show_profile_dialog
+from vote_settlement import (
+    format_target_date_label,
+    format_vote_panel_title,
+    get_member_pending_vote,
+    get_open_vote_date,
+    get_vote_target_date,
+    process_vote_settlements,
+    queue_member_vote,
 )
 from accuracy_badge import (
     get_member_badge,
     inject_accuracy_badge_css,
     init_vote_accuracy_session,
-    record_member_vote,
+    render_member_tier_profile,
+    sync_accuracy_from_ledger,
 )
 from stock_config import (
     DEFAULT_STOCK_CODE,
@@ -49,7 +71,7 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260708u"
+APP_VERSION = "20260710b"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
 CACHE_TTL_SECONDS = 600
@@ -310,7 +332,7 @@ MOBILE_FRAME_CSS = """
     align-items: center !important;
     justify-content: center !important;
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-    font-size: 0.6875rem !important;
+    font-size: 0.625rem !important;
     font-weight: 600 !important;
     line-height: 1.3 !important;
     letter-spacing: -0.03em !important;
@@ -522,21 +544,21 @@ MOBILE_CSS = """
     }
     .gossip-badge {
         display: inline-block;
-        font-size: 0.6875rem;
-        font-weight: 700;
+        font-size: 11px;
+        font-weight: 800;
         letter-spacing: -0.01em;
-        padding: 4px 8px;
+        padding: 3px 8px;
         border-radius: 6px;
         margin-bottom: 10px;
-        line-height: 1;
+        line-height: 1.25;
     }
     .gossip-badge-naver {
-        background: #e8f5e9;
-        color: #2e7d32;
+        background: #03C75A;
+        color: #FFFFFF;
     }
     .gossip-badge-toss {
-        background: #e8f0fe;
-        color: #3182f6;
+        background: #3182F6;
+        color: #FFFFFF;
     }
     .gossip-card-title {
         margin: 0;
@@ -602,6 +624,13 @@ MOBILE_CSS = """
         font-weight: 500; letter-spacing: -0.02em;
     }
     .ad-membership-card strong { color: #191f28; font-weight: 800; }
+    .app-legal-disclaimer {
+        margin: 0 0 8px 0; padding: 0 2px 4px 2px;
+        font-size: 11px; line-height: 1.55; font-weight: 500;
+        color: #888888; letter-spacing: -0.01em;
+        word-break: keep-all; overflow-wrap: break-word;
+        text-align: left;
+    }
     .ad-banner {
         margin-top: 24px; height: 60px;
         background: linear-gradient(135deg, #eceff3 0%, #dfe3ea 100%);
@@ -766,24 +795,156 @@ MOBILE_CSS = """
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03) !important;
     }
     .cpr-vote-head {
-        font-size: 0.9375rem; font-weight: 800; color: #191f28;
-        margin: 0; letter-spacing: -0.03em; line-height: 1.3;
+        font-size: 1.0625rem; font-weight: 800; color: #111111;
+        margin: 0 0 4px 0; letter-spacing: -0.03em; line-height: 1.4;
     }
-    .cpr-vote-sub {
-        font-size: 0.75rem; font-weight: 600; color: #8b95a1;
-        margin: 2px 0 8px 0; letter-spacing: -0.01em;
+    .cpr-vote-notice {
+        font-size: 0.75rem; font-weight: 600; color: #8E94A0;
+        margin: 0 0 12px 0; line-height: 1.4;
     }
-    .cpr-vote-lock {
-        font-size: 0.6875rem; font-weight: 600; color: #adb5bd;
-        margin: 0 0 6px 0; line-height: 1.4;
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets),
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stElementContainer"],
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stElementContainer"],
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"],
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button,
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        min-height: 5.25rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        font-size: 1.3125rem !important;
+        font-weight: 800 !important;
+        padding: 18px 16px !important;
+        border-radius: 16px !important;
+        border: 2px solid #D1D6DB !important;
+        background: #FFFFFF !important;
+        color: #191F28 !important;
+        box-shadow: none !important;
+        margin: 0 0 10px 0 !important;
+        white-space: nowrap !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="primary"],
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="primary"] {
+        border-color: #3182F6 !important;
+        background: #E8F3FF !important;
+        color: #1565C0 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="secondary"],
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button[kind="secondary"] {
+        background: #FFFFFF !important;
+        color: #191F28 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button:disabled,
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) [data-testid="stButton"] > button:disabled {
+        opacity: 0.45 !important;
+        border-color: #E5E8EB !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) .cpr-vote-bar-wrap,
+    [data-testid="stVerticalBlock"]:has(.cpr-vote-touch-targets) .cpr-vote-bar-wrap,
+    .cpr-vote-bar-wrap {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.cpr-vote-touch-targets) .cpr-vote-stats,
+    .cpr-vote-stats {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
     .cpr-vote-bar-wrap {
         display: flex; height: 20px; border-radius: 999px; overflow: hidden;
         border: 1px solid #eef0f4; margin: 6px 0 4px 0;
     }
     .cpr-vote-stats {
-        display: flex; justify-content: space-between;
-        font-size: 0.6875rem; font-weight: 700; color: #6b7684;
+        display: flex; justify-content: center; align-items: center;
+        gap: 8px;
+        font-size: 0.75rem; font-weight: 800; color: #333d4b;
+        margin: 6px 0 4px 0; letter-spacing: -0.02em;
+    }
+    .cpr-vote-bar-sep { color: #d1d6db; font-weight: 700; }
+    .cpr-vote-window-hint {
+        font-size: 0.6875rem; font-weight: 600; color: #8b95a1;
+        margin: 0 0 8px 0; line-height: 1.45; letter-spacing: -0.01em;
+    }
+    .betting-board-head { margin: 0 0 12px 0; }
+    .betting-board-title {
+        font-size: 1rem; font-weight: 800; color: #191f28;
+        margin: 0 0 4px 0; letter-spacing: -0.03em;
+    }
+    .betting-board-sub {
+        font-size: 0.6875rem; font-weight: 600; color: #8b95a1;
+        margin: 0; line-height: 1.45;
+    }
+    .betting-board-grid { display: flex; flex-direction: column; gap: 10px; }
+    .betting-row {
+        background: #F8F9FA; border: 1px solid #EEF0F3;
+        border-radius: 14px; padding: 12px 14px;
+    }
+    .betting-row-highlight {
+        border-color: #cfe3ff; background: #f5f9ff;
+    }
+    .betting-row-name {
+        font-size: 0.875rem; font-weight: 800; color: #191f28;
+        margin: 0 0 8px 0; letter-spacing: -0.02em;
+    }
+    .betting-row-code {
+        font-size: 0.6875rem; font-weight: 600; color: #8b95a1;
+    }
+    .betting-row-meta {
+        font-size: 0.6875rem; font-weight: 600; color: #8E94A0;
+        margin: 6px 0 0 0;
+    }
+    .toss-bet-bar-wrap {
+        display: flex; height: 14px; border-radius: 999px;
+        overflow: hidden; border: 1px solid #eef0f4;
+    }
+    .toss-bet-bar-long {
+        background: linear-gradient(90deg, #66bb6a, #43a047);
+        transition: width 0.3s ease;
+    }
+    .toss-bet-bar-short {
+        background: linear-gradient(90deg, #ef5350, #e53935);
+        transition: width 0.3s ease;
+    }
+    .toss-bet-bar-labels {
+        display: flex; justify-content: center; align-items: center;
+        gap: 8px; margin-top: 6px;
+        font-size: 0.75rem; font-weight: 800; color: #333d4b;
+    }
+    .toss-bet-sep { color: #d1d6db; font-weight: 700; }
+    .betting-history-title {
+        font-size: 0.9375rem; font-weight: 800; color: #191f28;
+        margin: 18px 0 10px 0; letter-spacing: -0.02em;
+    }
+    .betting-history-market {
+        font-size: 0.8125rem; font-weight: 700; color: #4e5968;
+        margin: 0 0 8px 0;
+    }
+    .betting-history-my {
+        font-size: 0.8125rem; font-weight: 700; color: #3182f6;
+        margin: 0 0 10px 0; letter-spacing: 0.06em;
+    }
+    .betting-history-grid { display: flex; flex-direction: column; gap: 8px; }
+    .betting-history-card {
+        background: #ffffff; border: 1px solid #eef0f4;
+        border-radius: 12px; padding: 10px 12px;
+    }
+    .cpr-vote-my-pick {
+        font-size: 0.6875rem; font-weight: 700; color: #3182f6;
         margin: 0 0 6px 0;
     }
     .cpr-compose-divider {
@@ -1784,69 +1945,115 @@ def render_hanriver_vote_panel(
     *,
     embed_cpr: bool = False,
 ) -> None:
-    """종목별 실시간 투표 — embed_cpr 시 심폐소생실 통합 카드."""
+    """D+1 롱/숏 투표 — 08:00 마감 · 20:00 정산."""
     init_member_session()
     init_vote_accuracy_session()
     inject_accuracy_badge_css()
     code = str(stock_code).strip()
-
+    user = st.session_state.get("member_user")
+    open_date = get_open_vote_date()
+    vote_open = is_trading_vote_open()
     guest = not is_member()
     vote_locked = is_vote_locked_for_stock(code)
-
-    if embed_cpr:
-        st.markdown(
-            f'<p class="cpr-vote-head">📈 오늘의 개미방 포지션</p>'
-            f'<p class="cpr-vote-sub">{html.escape(stock_name)} ({code})</p>',
-            unsafe_allow_html=True,
+    session_key = open_date.isoformat() if open_date else ""
+    voter_key = str((user or {}).get("email", "")).strip() if user else ""
+    my_vote: str | None = None
+    if is_member_ready() and session_key:
+        my_vote = get_member_pending_vote(
+            user=user,
+            session_date=session_key,
+            stock_code=code,
         )
-        if guest:
-            st.markdown(
-                '<p class="cpr-vote-lock">🔒 투표·글쓰기 회원전용 · 버튼 터치 시 가입</p>',
-                unsafe_allow_html=True,
+        if not my_vote and voter_key:
+            my_vote = get_user_stock_vote(code, voter_key)
+
+    st.markdown(
+        f'<p class="cpr-vote-head">{html.escape(format_vote_panel_title(stock_name))}</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p class="cpr-vote-notice">⚠️ 오전 8시 마감</p>',
+        unsafe_allow_html=True,
+    )
+
+    if is_member_ready():
+        render_member_tier_profile(user)
+    elif is_member() and needs_nickname_setup():
+        st.caption("닉네임 설정 후 투표할 수 있습니다.")
+    elif guest and embed_cpr:
+        st.caption("로그인 후 투표할 수 있습니다.")
+
+    if my_vote and vote_open:
+        pick_label = "롱" if my_vote == "long" else "숏"
+        st.caption(f"내 선택: {pick_label} · 마감 전까지 변경 가능")
+
+    st.markdown('<span class="cpr-vote-touch-targets" style="display:none"></span>', unsafe_allow_html=True)
+    long_selected = my_vote == "long"
+    short_selected = my_vote == "short"
+    with st.container():
+        long_clicked = st.button(
+            "📈 롱 (상승)" + (" ✓" if long_selected else ""),
+            use_container_width=True,
+            key=f"vote_long_{code}",
+            type="primary" if long_selected else "secondary",
+            disabled=not vote_open,
+        )
+        short_clicked = st.button(
+            "📉 숏 (하락)" + (" ✓" if short_selected else ""),
+            use_container_width=True,
+            key=f"vote_short_{code}",
+            type="primary" if short_selected else "secondary",
+            disabled=not vote_open,
+        )
+
+    if long_clicked or short_clicked:
+        side = "long" if long_clicked else "short"
+        if not is_member_ready():
+            if not is_member():
+                set_vote_locked_for_stock(code)
+            st.rerun()
+        elif not vote_open or open_date is None:
+            st.warning("투표 마감 시간(08:00)입니다. 잠시 후 다음 회차가 열립니다.")
+        else:
+            open_key = open_date.isoformat()
+            ok, msg = queue_member_vote(
+                user=user,
+                session_date=open_key,
+                stock_code=code,
+                vote_type=side,
             )
-    else:
-        st.markdown(
-            f'<p class="cpr-vote-head">📊 실시간 시장 심리 전광판</p>'
-            f'<p class="cpr-vote-sub">{html.escape(stock_name)} ({code})</p>',
-            unsafe_allow_html=True,
-        )
+            if not ok:
+                st.warning(msg or "투표에 실패했습니다.")
+            else:
+                success, status = add_stock_vote(
+                    code, side, voter_key=voter_key or None
+                )
+                if not success:
+                    st.warning("투표 집계 반영에 실패했습니다. 잠시 후 다시 시도해 주세요.")
+                elif status == "session_mismatch":
+                    st.warning("투표 세션이 변경되었습니다. 새로고침 후 다시 시도해 주세요.")
+                else:
+                    st.rerun()
 
-    vote_col1, vote_col2 = st.columns(2)
-    with vote_col1:
-        if st.button("😱 살려줘", use_container_width=True, key=f"vote_fear_{code}"):
-            if not is_member():
-                set_vote_locked_for_stock(code)
-                st.rerun()
-            add_stock_vote(code, "fear")
-            record_member_vote(vote_type="fear")
-            st.rerun()
-    with vote_col2:
-        if st.button("🚀 가즈아", use_container_width=True, key=f"vote_greed_{code}"):
-            if not is_member():
-                set_vote_locked_for_stock(code)
-                st.rerun()
-            add_stock_vote(code, "greed")
-            record_member_vote(vote_type="greed")
-            st.rerun()
-
-    fear_votes, greed_votes = get_stock_vote_counts(code)
-    total_votes = fear_votes + greed_votes
+    short_votes, long_votes = get_stock_vote_counts(code)
+    total_votes = short_votes + long_votes
     if total_votes == 0:
-        fear_pct = 50.0
-        greed_pct = 50.0
+        short_pct = 50.0
+        long_pct = 50.0
     else:
-        fear_pct = fear_votes / total_votes * 100
-        greed_pct = 100 - fear_pct
+        short_pct = short_votes / total_votes * 100
+        long_pct = 100 - short_pct
 
     st.markdown(
         f"""
         <div class="cpr-vote-bar-wrap">
-            <div class="hanriver-bar-fear" style="width:{fear_pct:.1f}%;"></div>
-            <div class="hanriver-bar-greed" style="width:{greed_pct:.1f}%;"></div>
+            <div class="hanriver-bar-greed" style="width:{long_pct:.1f}%;"></div>
+            <div class="hanriver-bar-fear" style="width:{short_pct:.1f}%;"></div>
         </div>
         <div class="cpr-vote-stats">
-            <span>😱 {fear_votes}표 ({fear_pct:.0f}%)</span>
-            <span>🚀 {greed_votes}표 ({greed_pct:.0f}%)</span>
+            <span>📈 롱 {long_pct:.0f}%</span>
+            <span class="cpr-vote-bar-sep">|</span>
+            <span>📉 숏 {short_pct:.0f}%</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1858,45 +2065,6 @@ def render_hanriver_vote_panel(
         return
 
     show_vote_gate_if_needed(compact=False)
-
-    if total_votes > 0:
-        chart_fig = go.Figure(
-            data=[
-                go.Bar(
-                    y=["실시간 투표"],
-                    x=[fear_votes],
-                    name="😱 살려줘",
-                    orientation="h",
-                    marker_color="#e53935",
-                    text=[f"{fear_votes}표"],
-                    textposition="inside",
-                ),
-                go.Bar(
-                    y=["실시간 투표"],
-                    x=[greed_votes],
-                    name="🚀 가즈아",
-                    orientation="h",
-                    marker_color="#43a047",
-                    text=[f"{greed_votes}표"],
-                    textposition="inside",
-                ),
-            ]
-        )
-        chart_fig.update_layout(
-            barmode="stack",
-            height=72,
-            margin=dict(l=10, r=10, t=8, b=8),
-            plot_bgcolor="#ffffff",
-            paper_bgcolor="#ffffff",
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.15, x=0),
-            xaxis=dict(showgrid=False, zeroline=False, fixedrange=True),
-            yaxis=dict(showticklabels=False, fixedrange=True),
-            dragmode=False,
-        )
-        _render_static_plotly(chart_fig, use_container_width=True)
-    else:
-        st.caption("아직 투표가 없습니다. 첫 번째 개미의 한 표를 던져 보세요!")
 
 
 def simulate_refresh_ad_gate() -> None:
@@ -1919,6 +2087,22 @@ def simulate_refresh_ad_gate() -> None:
         with st.spinner("광고 로딩 중..."):
             time.sleep(2)
     gate_slot.empty()
+
+
+def render_investment_disclaimer_footer() -> None:
+    """탭 하단 — 투자 책임 면책 고지 (법적 Disclaimer)."""
+    st.markdown(
+        """
+        <hr style="border: 0; border-top: 1px solid #E5E8EB; margin: 30px 0 10px 0;">
+        <p class="app-legal-disclaimer">
+            본 서비스에서 제공하는 모든 데이터, 분석 결과 및
+            유저들의 투표 포지션 정보는 투자 참고용일 뿐이며, 특정 종목의 매수·매도
+            추천이 아닙니다. 투자에 대한 최종 결정과 그에 따른 모든 책임은
+            투자자 본인에게 귀속됩니다.
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_membership_ad_footer() -> None:
@@ -2207,7 +2391,8 @@ def _load_cpr_room_renderer():
     """Streamlit이 cpr_room.py 수정본을 안 불러오는 문제 방지."""
     import sys as _sys
 
-    _sys.modules.pop("cpr_room", None)
+    for mod in ("cpr_room", "member_auth", "accuracy_badge"):
+        _sys.modules.pop(mod, None)
     import cpr_room
 
     return cpr_room
@@ -2216,6 +2401,16 @@ def _load_cpr_room_renderer():
 def run_app() -> None:
     """모바일 450px · 데이터 선로드 · 4단 탭."""
     init_member_session()
+    process_vote_settlements()
+    maybe_show_profile_dialog()
+    user = st.session_state.get("member_user")
+    if isinstance(user, dict) and user.get("email"):
+        from vote_settlement import init_vote_ledger
+
+        sync_accuracy_from_ledger(
+            init_vote_ledger(),
+            user_email=str(user.get("email", "")),
+        )
     if st.session_state.get("_app_version") != APP_VERSION:
         st.session_state["_app_version"] = APP_VERSION
         if st.session_state.get("stock_code") == "191150":
@@ -2236,7 +2431,17 @@ def run_app() -> None:
             "member_cpr_touch",
             "member_community_touch",
             "vote_accuracy_30d",
+            "vote_lock_by_stock",
+            "member_vote_ledger",
+            "_accuracy_badge_css_v8",
+            "_accuracy_badge_css_v7",
+            "_accuracy_badge_css_v6",
+            "_accuracy_badge_css_v5",
+            "_accuracy_badge_css_v4",
+            "_accuracy_badge_css_v3",
+            "_accuracy_badge_css_v2",
             "_accuracy_badge_css_injected",
+            "member_nickname_draft",
             "stock_votes",
             "vote_lock_by_stock",
             HANRIVER_FEAR_KEY,
@@ -2251,6 +2456,11 @@ def run_app() -> None:
     st.session_state["stock_code"] = normalize_stock_code(st.session_state["stock_code"])
 
     selected_code, selected_name, selected_market = render_mobile_stock_controls()
+
+    if not is_member():
+        render_social_login_banner()
+    elif needs_nickname_setup():
+        ensure_nickname_setup_flow()
 
     if st.session_state.pop("_ad_gate", False):
         simulate_refresh_ad_gate()
@@ -2277,14 +2487,34 @@ def run_app() -> None:
     backtest_snapshot = shared["backtest_snapshot"]
     backtest_error = shared["backtest_error"]
 
-    tab_cpr, tab1, tab2, tab3 = st.tabs(
+    tab_sentiment, tab_backtest, tab_cpr, tab_gossip = st.tabs(
         [
-            "심폐소생실",
-            "실시간 심리",
-            "백테스팅",
-            "곡소리",
+            "📊 실시간 심리",
+            "💸 백테스팅",
+            "🏥 심폐소생실",
+            "📰 곡소리 피드",
         ]
     )
+
+    with tab_sentiment:
+        render_main_header(selected_name, selected_code, selected_market)
+        render_combined_sentiment_panel(
+            naver_data, toss_data, selected_name, selected_code
+        )
+        render_platform_gap_panel(naver_data, toss_data, selected_name)
+        render_contrarian_ranking_board()
+        render_investment_disclaimer_footer()
+
+    with tab_backtest:
+        try:
+            render_backtest_panel(
+                selected_name,
+                backtest_snapshot,
+                error=backtest_error,
+            )
+        except Exception as exc:
+            st.error(f"백테스트 렌더링 오류: {exc}")
+        render_investment_disclaimer_footer()
 
     with tab_cpr:
         try:
@@ -2302,36 +2532,11 @@ def run_app() -> None:
                 )
                 cpr_mod.render_cpr_compose_zone()
             cpr_mod.render_cpr_post_feed()
-            render_community_posts_panel(
-                naver_data,
-                toss_data,
-                naver_error,
-                toss_error,
-                section_title="네이버·토스 등 외부 커뮤니티 곡소리",
-                compact=True,
-            )
         except Exception as exc:
             st.error(f"심폐소생실방 렌더링 오류: {exc}")
+        render_investment_disclaimer_footer()
 
-    with tab1:
-        render_main_header(selected_name, selected_code, selected_market)
-        render_combined_sentiment_panel(
-            naver_data, toss_data, selected_name, selected_code
-        )
-        render_platform_gap_panel(naver_data, toss_data, selected_name)
-        render_contrarian_ranking_board()
-
-    with tab2:
-        try:
-            render_backtest_panel(
-                selected_name,
-                backtest_snapshot,
-                error=backtest_error,
-            )
-        except Exception as exc:
-            st.error(f"백테스트 렌더링 오류: {exc}")
-
-    with tab3:
+    with tab_gossip:
         try:
             render_community_posts_panel(
                 naver_data,
@@ -2343,6 +2548,7 @@ def run_app() -> None:
         except Exception as exc:
             st.error(f"커뮤니티 글 목록 렌더링 오류: {exc}")
         render_membership_ad_footer()
+        render_investment_disclaimer_footer()
 
 
 run_app()
