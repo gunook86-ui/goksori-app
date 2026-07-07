@@ -11,7 +11,7 @@ import html
 import math
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -49,9 +49,11 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260708r"
+APP_VERSION = "20260708s"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
+CACHE_TTL_SECONDS = 600
+FETCH_TIMEOUT_SEC = 3
 PLOTLY_MOBILE_CONFIG: dict = {
     "scrollZoom": False,
     "displayModeBar": False,
@@ -86,6 +88,77 @@ def _load_fresh_analyzers():
     from toss_scraper import analyze_toss_community
 
     return analyze_naver_board, analyze_toss_community
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def cached_analyze_naver_board(
+    stock_code: str, stock_name: str, post_limit: int
+) -> dict | None:
+    """네이버 토론방 심리 분석 — 10분 메모리 캐시."""
+    try:
+        from naver_scraper import analyze_naver_board
+
+        return analyze_naver_board(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            post_limit=post_limit,
+        )
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def cached_analyze_toss_community(
+    stock_code: str, stock_name: str, post_limit: int
+) -> dict | None:
+    """토스 커뮤니티 심리 분석 — 10분 메모리 캐시."""
+    try:
+        from toss_scraper import analyze_toss_community
+
+        return analyze_toss_community(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            post_limit=post_limit,
+        )
+    except Exception:
+        return None
+
+
+def _session_stock_data(stock_code: str) -> tuple[dict | None, dict | None]:
+    """동일 종목 세션 백업 데이터."""
+    if st.session_state.get("data_stock_code") != stock_code:
+        return None, None
+    return st.session_state.get("data_naver"), st.session_state.get("data_toss")
+
+
+def _fetch_naver_with_timeout(
+    stock_code: str, stock_name: str, post_limit: int
+) -> tuple[dict | None, str | None]:
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            cached_analyze_naver_board, stock_code, stock_name, post_limit
+        )
+        try:
+            return future.result(timeout=FETCH_TIMEOUT_SEC), None
+        except FuturesTimeoutError:
+            return None, f"네이버 수집 시간 초과 ({FETCH_TIMEOUT_SEC}초)"
+        except Exception as error:
+            return None, str(error)
+
+
+def _fetch_toss_with_timeout(
+    stock_code: str, stock_name: str, post_limit: int
+) -> tuple[dict | None, str | None]:
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            cached_analyze_toss_community, stock_code, stock_name, post_limit
+        )
+        try:
+            return future.result(timeout=FETCH_TIMEOUT_SEC), None
+        except FuturesTimeoutError:
+            return None, f"토스 수집 시간 초과 ({FETCH_TIMEOUT_SEC}초)"
+        except Exception as error:
+            return None, str(error)
 
 
 def _load_fresh_backtest():
@@ -160,15 +233,17 @@ MOBILE_FRAME_CSS = """
     width: auto !important;
     max-width: none !important;
 }
-/* 탭 내부 column은 flex 축소 금지 — Cloud에서 글자 겹침 방지 */
+/* 탭 내부 — 4분할 균등 세그먼트 (Cloud·모바일 100% 폭) */
 [data-testid="stTabs"] [data-testid="stHorizontalBlock"],
-[data-testid="stTabs"] [data-testid="stHorizontalBlock"] > [data-testid="column"],
-[data-testid="stTabs"] [data-testid="column"] {
-    flex: 0 0 auto !important;
-    min-width: max-content !important;
+[data-testid="stTabs"] [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
     width: auto !important;
     max-width: none !important;
     gap: 0 !important;
+}
+[data-testid="stTabs"] [data-testid="column"] > div {
+    width: 100% !important;
 }
 /* ── 탭: 토스형 세그먼트 + 하단 강조 (Cloud 호환) ── */
 [data-testid="stTabs"] {
@@ -190,18 +265,16 @@ MOBILE_FRAME_CSS = """
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     align-items: stretch !important;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
     overflow-y: hidden !important;
-    gap: 6px !important;
+    gap: 4px !important;
     width: 100% !important;
     min-height: 44px !important;
-    padding: 4px 4px 0 4px !important;
+    padding: 4px !important;
     margin: 0 0 6px 0 !important;
     background: #eef0f4 !important;
     border-radius: 14px !important;
     border-bottom: none !important;
-    scrollbar-width: none !important;
-    -webkit-overflow-scrolling: touch !important;
     box-sizing: border-box !important;
 }
 [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar,
@@ -212,22 +285,25 @@ MOBILE_FRAME_CSS = """
 [data-testid="stTabs"] button[role="tab"],
 [data-testid="stTabs"] button[data-baseweb="tab"],
 [data-testid="stTabs"] [data-baseweb="tab"] {
-    flex: 0 0 auto !important;
-    flex-shrink: 0 !important;
-    min-width: max-content !important;
+    flex: 1 1 0 !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
     max-width: none !important;
-    width: auto !important;
+    width: 100% !important;
     height: auto !important;
     min-height: 36px !important;
-    padding: 8px 14px 10px 14px !important;
+    padding: 9px 2px 11px 2px !important;
     margin: 0 !important;
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-    font-size: 0.8125rem !important;
+    font-size: 0.6875rem !important;
     font-weight: 600 !important;
-    line-height: 1.35 !important;
-    letter-spacing: -0.02em !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.03em !important;
     white-space: nowrap !important;
-    word-break: keep-all !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    justify-content: center !important;
     color: #8b95a1 !important;
     background: transparent !important;
     border: none !important;
@@ -243,9 +319,13 @@ MOBILE_FRAME_CSS = """
 [data-testid="stTabs"] button[role="tab"] span,
 [data-testid="stTabs"] button[data-baseweb="tab"] span,
 [data-testid="stTabs"] [data-baseweb="tab"] span {
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
+    width: 100% !important;
     white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
     font-size: inherit !important;
     font-weight: inherit !important;
     line-height: inherit !important;
@@ -1098,11 +1178,14 @@ def _render_top3_chips(episodes: list[dict]) -> str:
 
 def fetch_backtest_snapshot(stock_code: str) -> tuple[dict | None, str | None]:
     """최근 30거래일 실시간 종가 + 역발상 매수 타점 + TOP3 에피소드."""
-    try:
-        import sys as _sys
+    return _cached_backtest_snapshot(stock_code, APP_VERSION)
 
-        for module_name in ("toss_price", "naver_price", "backtest_core"):
-            _sys.modules.pop(module_name, None)
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_backtest_snapshot(
+    stock_code: str, _app_version: str
+) -> tuple[dict | None, str | None]:
+    try:
         from backtest_core import (
             build_contrarian_backtest_from_bars,
             estimate_daily_fear_scores,
@@ -1459,32 +1542,25 @@ def render_stock_picker() -> tuple[str, str, str]:
     return selected_code, selected_name, selected_market
 
 
-def _fetch_ranking_entry(
-    stock_code: str,
-    stock_name: str,
-    analyze_naver_board,
-    analyze_toss_community,
-) -> dict | None:
+def _fetch_ranking_entry(stock_code: str, stock_name: str) -> dict | None:
     naver_data: dict | None = None
     toss_data: dict | None = None
 
-    try:
-        naver_data = analyze_naver_board(
-            stock_code=stock_code,
-            stock_name=stock_name,
-            post_limit=RANKING_POST_LIMIT,
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        naver_future = pool.submit(
+            _fetch_naver_with_timeout, stock_code, stock_name, RANKING_POST_LIMIT
         )
-    except Exception:
-        naver_data = None
-
-    try:
-        toss_data = analyze_toss_community(
-            stock_code=stock_code,
-            stock_name=stock_name,
-            post_limit=RANKING_POST_LIMIT,
+        toss_future = pool.submit(
+            _fetch_toss_with_timeout, stock_code, stock_name, RANKING_POST_LIMIT
         )
-    except Exception:
-        toss_data = None
+        try:
+            naver_data, _ = naver_future.result(timeout=FETCH_TIMEOUT_SEC + 1)
+        except Exception:
+            naver_data = None
+        try:
+            toss_data, _ = toss_future.result(timeout=FETCH_TIMEOUT_SEC + 1)
+        except Exception:
+            toss_data = None
 
     score = _combined_fear_score(naver_data, toss_data)
     if score is None:
@@ -1500,15 +1576,23 @@ def _fetch_ranking_entry(
     }
 
 
-def _build_top3_ranking(analyze_naver_board, analyze_toss_community) -> list[dict]:
+def _build_top3_ranking() -> list[dict]:
     entries: list[dict] = []
 
     def _worker(stock: tuple[str, str]) -> dict | None:
         code, name = stock
-        return _fetch_ranking_entry(code, name, analyze_naver_board, analyze_toss_community)
+        try:
+            return _fetch_ranking_entry(code, name)
+        except Exception:
+            return None
 
     with ThreadPoolExecutor(max_workers=6) as pool:
-        for result in pool.map(_worker, _get_all_top20_stocks()):
+        futures = [pool.submit(_worker, stock) for stock in _get_all_top20_stocks()]
+        for future in futures:
+            try:
+                result = future.result(timeout=FETCH_TIMEOUT_SEC)
+            except Exception:
+                result = None
             if result:
                 entries.append(result)
 
@@ -1516,25 +1600,25 @@ def _build_top3_ranking(analyze_naver_board, analyze_toss_community) -> list[dic
     return entries[:3]
 
 
-def _cached_top3_ranking(app_version: str) -> list[dict]:
-    import sys as _sys
-
-    for module_name in LOCAL_MODULES:
-        _sys.modules.pop(module_name, None)
-    from naver_scraper import analyze_naver_board
-    from toss_scraper import analyze_toss_community
-
-    return _build_top3_ranking(analyze_naver_board, analyze_toss_community)
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _cached_top3_ranking(_app_version: str) -> list[dict]:
+    return _build_top3_ranking()
 
 
 def render_contrarian_ranking_board() -> None:
     """🏆 오늘의 역발상 랭킹 전광판 — 공포 점수 최저 TOP 3."""
+    backup: list[dict] = list(st.session_state.get("ranking_top3_backup") or [])
+    top3: list[dict] = backup
+
     try:
-        with st.spinner("역발상 랭킹 집계 중..."):
-            top3 = _cached_top3_ranking(APP_VERSION)
-    except Exception as exc:
-        st.caption(f"역발상 랭킹을 불러오지 못했습니다. ({exc})")
-        return
+        fresh = _cached_top3_ranking(APP_VERSION)
+        if fresh:
+            top3 = fresh
+            st.session_state["ranking_top3_backup"] = fresh
+    except Exception:
+        if not backup:
+            st.caption("역발상 랭킹을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")
+            return
 
     if not top3:
         st.caption("역발상 랭킹 데이터가 아직 없습니다.")
@@ -1920,30 +2004,45 @@ def render_community_posts_panel(
 
 
 def fetch_both_parallel(stock_code: str, stock_name: str) -> tuple[dict | None, dict | None, str | None, str | None]:
-    """네이버+토스 병렬 수집. 한쪽 실패해도 다른 쪽은 유지."""
-    analyze_naver_board, analyze_toss_community = _load_fresh_analyzers()
+    """네이버+토스 병렬 수집. 타임아웃·실패 시 세션 백업으로 즉시 렌더."""
+    fallback_naver, fallback_toss = _session_stock_data(stock_code)
     naver_data: dict | None = None
     toss_data: dict | None = None
     naver_error: str | None = None
     toss_error: str | None = None
 
-    def _fetch_naver() -> dict:
-        return analyze_naver_board(stock_code=stock_code, stock_name=stock_name)
-
-    def _fetch_toss() -> dict:
-        return analyze_toss_community(stock_code=stock_code, stock_name=stock_name)
-
     with ThreadPoolExecutor(max_workers=2) as pool:
-        naver_future = pool.submit(_fetch_naver)
-        toss_future = pool.submit(_fetch_toss)
+        naver_future = pool.submit(
+            _fetch_naver_with_timeout,
+            stock_code,
+            stock_name,
+            TARGET_POST_COUNT,
+        )
+        toss_future = pool.submit(
+            _fetch_toss_with_timeout,
+            stock_code,
+            stock_name,
+            TARGET_POST_COUNT,
+        )
         try:
-            naver_data = naver_future.result()
+            naver_data, naver_error = naver_future.result(timeout=FETCH_TIMEOUT_SEC + 1)
+        except FuturesTimeoutError:
+            naver_error = f"네이버 수집 시간 초과 ({FETCH_TIMEOUT_SEC}초)"
         except Exception as error:
             naver_error = str(error)
         try:
-            toss_data = toss_future.result()
+            toss_data, toss_error = toss_future.result(timeout=FETCH_TIMEOUT_SEC + 1)
+        except FuturesTimeoutError:
+            toss_error = f"토스 수집 시간 초과 ({FETCH_TIMEOUT_SEC}초)"
         except Exception as error:
             toss_error = str(error)
+
+    if naver_data is None and fallback_naver is not None:
+        naver_data = fallback_naver
+        naver_error = naver_error or "이전 세션 데이터 사용"
+    if toss_data is None and fallback_toss is not None:
+        toss_data = fallback_toss
+        toss_error = toss_error or "이전 세션 데이터 사용"
 
     return naver_data, toss_data, naver_error, toss_error
 
@@ -1974,16 +2073,41 @@ def ensure_data(stock_code: str, stock_name: str, *, force: bool = False) -> Non
     if _cache_is_valid(cache_key, force=force):
         return
 
-    with st.spinner("최신 시장 데이터를 분석하는 중..."):
+    fallback_naver, fallback_toss = _session_stock_data(stock_code)
+    has_fallback = fallback_naver is not None or fallback_toss is not None
+
+    def _collect() -> None:
         naver_data, toss_data, naver_error, toss_error = fetch_both_parallel(
             stock_code, stock_name
         )
+        st.session_state["data_naver"] = naver_data
+        st.session_state["data_toss"] = toss_data
+        st.session_state["data_naver_error"] = naver_error
+        st.session_state["data_toss_error"] = toss_error
+        st.session_state["data_stock_code"] = stock_code
+        st.session_state["data_cache_key"] = cache_key
 
-    st.session_state["data_naver"] = naver_data
-    st.session_state["data_toss"] = toss_data
-    st.session_state["data_naver_error"] = naver_error
-    st.session_state["data_toss_error"] = toss_error
-    st.session_state["data_cache_key"] = cache_key
+    if has_fallback:
+        try:
+            _collect()
+        except Exception:
+            pass
+        if st.session_state.get("data_cache_key") != cache_key:
+            st.session_state["data_naver"] = fallback_naver
+            st.session_state["data_toss"] = fallback_toss
+            st.session_state["data_stock_code"] = stock_code
+            st.session_state["data_cache_key"] = cache_key
+        return
+
+    with st.spinner("최신 시장 데이터를 분석하는 중..."):
+        try:
+            _collect()
+        except Exception:
+            if fallback_naver is not None or fallback_toss is not None:
+                st.session_state["data_naver"] = fallback_naver
+                st.session_state["data_toss"] = fallback_toss
+                st.session_state["data_stock_code"] = stock_code
+                st.session_state["data_cache_key"] = cache_key
 
 
 def reset_data_cache() -> None:

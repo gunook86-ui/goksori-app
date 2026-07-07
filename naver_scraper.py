@@ -20,7 +20,7 @@ from stock_config import DEFAULT_STOCK_CODE, STOCK_CATALOG, USER_AGENT, normaliz
 NAVER_DISCUSSION_API = "https://m.stock.naver.com/front-api/discussion/list"
 DISCUSSION_TYPE = "domesticStock"
 PAGE_SIZE = 20
-REQUEST_TIMEOUT = (2, 4)
+REQUEST_TIMEOUT = (1, 3)
 
 
 def _clean_text(raw: str) -> str:
