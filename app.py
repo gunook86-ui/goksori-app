@@ -49,9 +49,16 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260708o"
+APP_VERSION = "20260708r"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
+PLOTLY_MOBILE_CONFIG: dict = {
+    "scrollZoom": False,
+    "displayModeBar": False,
+    "staticPlot": True,
+    "doubleClick": False,
+    "displaylogo": False,
+}
 TARGET_POST_COUNT = 100
 MAX_SCAN_PAGES = 20
 RANKING_POST_LIMIT = 40
@@ -153,63 +160,118 @@ MOBILE_FRAME_CSS = """
     width: auto !important;
     max-width: none !important;
 }
-/* ── 탭: 가로 스크롤 세그먼트 ── */
+/* 탭 내부 column은 flex 축소 금지 — Cloud에서 글자 겹침 방지 */
+[data-testid="stTabs"] [data-testid="stHorizontalBlock"],
+[data-testid="stTabs"] [data-testid="stHorizontalBlock"] > [data-testid="column"],
+[data-testid="stTabs"] [data-testid="column"] {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+    width: auto !important;
+    max-width: none !important;
+    gap: 0 !important;
+}
+/* ── 탭: 토스형 세그먼트 + 하단 강조 (Cloud 호환) ── */
 [data-testid="stTabs"] {
     width: 100% !important;
     max-width: 100% !important;
+    margin-top: 0.5rem !important;
     background: transparent !important;
 }
+[data-testid="stTabs"] > div,
 [data-testid="stTabs"] .st-dr {
     display: flex !important;
     flex-direction: column !important;
     align-items: stretch !important;
     width: 100% !important;
 }
-[data-testid="stTabs"] [role="tablist"] {
+[data-testid="stTabs"] [role="tablist"],
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
     display: flex !important;
+    flex-direction: row !important;
     flex-wrap: nowrap !important;
+    align-items: stretch !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    gap: 0 !important;
+    gap: 6px !important;
     width: 100% !important;
-    padding: 0 0 0 0 !important;
-    margin-bottom: 4px !important;
-    border-bottom: 1px solid #e5e8eb !important;
+    min-height: 44px !important;
+    padding: 4px 4px 0 4px !important;
+    margin: 0 0 6px 0 !important;
+    background: #eef0f4 !important;
+    border-radius: 14px !important;
+    border-bottom: none !important;
     scrollbar-width: none !important;
     -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
 }
-[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar,
+[data-testid="stTabs"] [data-baseweb="tab-list"]::-webkit-scrollbar {
     display: none !important;
+    height: 0 !important;
 }
-[data-testid="stTabs"] button[data-baseweb="tab"] {
+[data-testid="stTabs"] button[role="tab"],
+[data-testid="stTabs"] button[data-baseweb="tab"],
+[data-testid="stTabs"] [data-baseweb="tab"] {
     flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
     min-width: max-content !important;
     max-width: none !important;
     width: auto !important;
-    padding: 12px 16px !important;
+    height: auto !important;
+    min-height: 36px !important;
+    padding: 8px 14px 10px 14px !important;
     margin: 0 !important;
-    font-size: 0.9375rem !important;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-size: 0.8125rem !important;
     font-weight: 600 !important;
-    line-height: 1.3 !important;
+    line-height: 1.35 !important;
     letter-spacing: -0.02em !important;
     white-space: nowrap !important;
+    word-break: keep-all !important;
     color: #8b95a1 !important;
     background: transparent !important;
     border: none !important;
     border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
+    border-radius: 10px !important;
     box-shadow: none !important;
+    cursor: pointer !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
-[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
+[data-testid="stTabs"] button[role="tab"] p,
+[data-testid="stTabs"] button[data-baseweb="tab"] p,
+[data-testid="stTabs"] [data-baseweb="tab"] p,
+[data-testid="stTabs"] button[role="tab"] span,
+[data-testid="stTabs"] button[data-baseweb="tab"] span,
+[data-testid="stTabs"] [data-baseweb="tab"] span {
+    margin: 0 !important;
+    padding: 0 !important;
+    white-space: nowrap !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+    letter-spacing: inherit !important;
+    color: inherit !important;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"],
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] {
     color: #191f28 !important;
     font-weight: 800 !important;
+    background: #ffffff !important;
     border-bottom: 2px solid #3182F6 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
 }
 [data-testid="stTabs"] div[data-baseweb="tab-panel"],
+[data-testid="stTabs"] [data-baseweb="tab-panel"],
 [data-testid="stTabs"] .st-dr > .st-co {
     width: 100% !important;
     max-width: 100% !important;
-    padding-top: 12px !important;
+    padding-top: 10px !important;
+}
+[data-testid="stTabs"] [data-testid="stButton"] > button {
+    width: auto !important;
+    min-width: 0 !important;
+    border-radius: 999px !important;
 }
 /* ── 버튼: 토스 블루 알약 ── */
 [data-testid="stButton"] > button {
@@ -264,6 +326,15 @@ div[data-testid="stPlotlyChart"] {
     max-width: 100% !important;
     border-radius: 20px !important;
     overflow: hidden !important;
+    touch-action: pan-y !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+}
+div[data-testid="stPlotlyChart"] .js-plotly-plot,
+div[data-testid="stPlotlyChart"] .plot-container,
+div[data-testid="stPlotlyChart"] .plotly {
+    touch-action: pan-y !important;
+    pointer-events: none !important;
 }
 .gap-insight, .score-sub {
     word-break: keep-all !important;
@@ -291,9 +362,6 @@ MOBILE_CSS = """
     div[data-testid="stTabs"] {
         margin-top: 0.5rem; width: 100%;
     }
-    div[data-testid="stTabs"] div[data-baseweb="tab-panel"] {
-        padding-top: 0.35rem !important;
-    }
     .tab-section-gap { margin-top: 0.75rem; }
     .app-header { text-align: left; padding: 4px 0 16px 0; }
     .app-header h1 {
@@ -318,35 +386,64 @@ MOBILE_CSS = """
         margin: 2px auto 0 auto; font-size: 0.75rem; color: #8b9099; font-weight: 600; padding: 0 6px;
     }
     .post-list-title {
-        font-size: 1rem; font-weight: 800; color: #191f28;
-        margin: 20px 0 12px 0; letter-spacing: -0.02em;
+        font-size: 0.9375rem; font-weight: 800; color: #191f28;
+        margin: 16px 0 10px 0; letter-spacing: -0.02em;
     }
-    .post-table-wrap {
-        max-height: 360px; overflow-y: auto; overflow-x: hidden;
-        border-radius: 20px; margin-bottom: 16px;
+    .gossip-feed-section {
+        font-size: 0.8125rem; font-weight: 700; color: #8b95a1;
+        margin: 14px 0 10px 0; letter-spacing: -0.01em;
+    }
+    .gossip-feed-scroll {
+        max-height: 420px; overflow-y: auto; overflow-x: hidden;
+        margin-bottom: 8px; padding-right: 2px;
+        -webkit-overflow-scrolling: touch;
+    }
+    .gossip-card {
+        display: block;
         background: #ffffff;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        border-radius: 16px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        text-decoration: none;
+        color: inherit;
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
     }
-    .post-table {
-        width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed;
+    .gossip-card:last-child { margin-bottom: 0; }
+    a.gossip-card:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+        transform: translateY(-1px);
     }
-    .post-table thead th {
-        position: sticky; top: 0; z-index: 1;
-        background: #f8f9fb; color: #1a1a2e; font-weight: 700;
-        padding: 8px 10px; border-bottom: 1px solid #eef0f4; text-align: left;
+    .gossip-badge {
+        display: inline-block;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        padding: 4px 8px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        line-height: 1;
     }
-    .post-table .post-no-h, .post-table .post-no {
-        width: 44px; text-align: center; vertical-align: top;
+    .gossip-badge-naver {
+        background: #e8f5e9;
+        color: #2e7d32;
     }
-    .post-table td {
-        padding: 7px 10px; border-bottom: 1px solid #f0f2f6;
-        vertical-align: top; line-height: 1.45; word-break: break-all;
+    .gossip-badge-toss {
+        background: #e8f0fe;
+        color: #3182f6;
     }
-    .post-table tbody tr:last-child td { border-bottom: none; }
-    .post-table .post-title a {
-        color: #1a73e8; text-decoration: none; font-weight: 500;
+    .gossip-card-title {
+        margin: 0;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        line-height: 1.55;
+        letter-spacing: -0.02em;
+        color: #333333;
+        word-break: keep-all;
+        overflow-wrap: anywhere;
     }
-    .post-table .post-title a:hover { text-decoration: underline; }
+    a.gossip-card .gossip-card-title { color: #333333; }
+    .gossip-card-plain .gossip-card-title { color: #333333; }
     .refresh-ad-gate-wrap {
         margin: 12px 0 16px 0; padding: 24px 20px;
         border-radius: 20px;
@@ -439,9 +536,6 @@ MOBILE_CSS = """
     .killer-card p {
         font-size: 0.875rem; color: #333d4b; line-height: 1.6; margin: 0;
         font-weight: 500; letter-spacing: -0.02em;
-    }
-    .alert-card {
-        background: #ffffff;
     }
     .gap-insight {
         font-size: 0.875rem; color: #333d4b; line-height: 1.6;
@@ -599,8 +693,14 @@ MOBILE_CSS = """
     .cpr-external-lurk .legend-drip {
         padding: 10px 12px; margin-bottom: 8px;
     }
-    .cpr-external-lurk .post-table-wrap {
-        max-height: 280px; margin-bottom: 10px;
+    .cpr-external-lurk .gossip-feed-scroll {
+        max-height: 300px; margin-bottom: 6px;
+    }
+    .cpr-external-lurk .gossip-feed-section {
+        margin: 10px 0 8px 0; font-size: 0.75rem;
+    }
+    .cpr-external-lurk .gossip-card {
+        padding: 14px; margin-bottom: 10px;
     }
     #cpr-tab-compose [data-testid="stTextArea"] {
         margin-bottom: 4px !important;
@@ -816,40 +916,24 @@ def format_score_summary(data: dict) -> str:
     return f"{fear_text} · {greed_text}"
 
 
+def _render_static_plotly(
+    fig: go.Figure,
+    *,
+    use_container_width: bool = False,
+) -> None:
+    """모바일 터치 간섭 없는 고정형 Plotly 차트."""
+    fig.update_layout(dragmode=False)
+    if use_container_width:
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_MOBILE_CONFIG)
+    else:
+        st.plotly_chart(fig, width="stretch", config=PLOTLY_MOBILE_CONFIG)
+
+
 def _score_or_default(data: dict | None) -> float:
     if data and data.get("post_count", 0) > 0:
         return float(data.get("score_raw", 50))
     return 50.0
 
-
-def render_push_alert_card(stock_code: str, current_score: int) -> None:
-    """🚨 실시간 곡소리 푸시 알림 시뮬레이터 (프로토타입)."""
-    toggle_key = f"push_alert_{stock_code}"
-    if toggle_key not in st.session_state:
-        st.session_state[toggle_key] = True
-
-    col_text, col_toggle = st.columns([5, 1])
-    with col_text:
-        st.markdown(
-            """
-            <div class="killer-card alert-card">
-                <h4>🚨 실시간 곡소리 알림 설정</h4>
-                <p>현재 선택된 종목의 공포 지수가 <b>20점 이하(극단적 공포)</b>로
-                떨어지면 스마트폰 푸시 알림을 보냅니다.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with col_toggle:
-        st.write("")
-        st.write("")
-        enabled = st.toggle("알림", key=toggle_key, label_visibility="collapsed")
-        if enabled and current_score <= 20:
-            st.caption("🔔 발송 대기")
-        elif enabled:
-            st.caption("✅ ON")
-        else:
-            st.caption("⏸ OFF")
 
 
 def _shared_mood_label(naver_score: float, toss_score: float) -> str:
@@ -928,14 +1012,15 @@ def render_platform_gap_panel(
     fig.update_layout(
         height=260,
         margin=dict(l=10, r=10, t=24, b=10),
-        yaxis=dict(range=[0, 105], title="", gridcolor="#f0f0f0"),
-        xaxis=dict(title=""),
+        yaxis=dict(range=[0, 105], title="", gridcolor="#f0f0f0", fixedrange=True),
+        xaxis=dict(title="", fixedrange=True),
         plot_bgcolor="#ffffff",
         paper_bgcolor="#ffffff",
         font=dict(family="sans-serif", size=12, color="#333"),
         showlegend=False,
+        dragmode=False,
     )
-    st.plotly_chart(fig, width="stretch")
+    _render_static_plotly(fig)
 
     commentary = _platform_gap_commentary(naver_score, toss_score)
     st.markdown(f'<div class="gap-insight">{commentary}</div>', unsafe_allow_html=True)
@@ -1294,7 +1379,6 @@ def render_combined_sentiment_panel(
         """,
         unsafe_allow_html=True,
     )
-    render_push_alert_card(stock_code, int(combined.get("score", 50)))
 
 
 def render_main_header(selected_name: str, selected_code: str, selected_market: str) -> None:
@@ -1674,10 +1758,11 @@ def render_hanriver_vote_panel(
             paper_bgcolor="#ffffff",
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.15, x=0),
-            xaxis=dict(showgrid=False, zeroline=False),
-            yaxis=dict(showticklabels=False),
+            xaxis=dict(showgrid=False, zeroline=False, fixedrange=True),
+            yaxis=dict(showticklabels=False, fixedrange=True),
+            dragmode=False,
         )
-        st.plotly_chart(chart_fig, use_container_width=True)
+        _render_static_plotly(chart_fig, use_container_width=True)
     else:
         st.caption("아직 투표가 없습니다. 첫 번째 개미의 한 표를 던져 보세요!")
 
@@ -1710,9 +1795,9 @@ def render_membership_ad_footer() -> None:
     st.markdown(
         """
         <div class="ad-membership-card">
-            <span class="ad-badge">AD</span>
-            <p><strong>월 4,900원</strong>으로 모든 광고를 제거하고<br>
-            실시간 <strong>찐바닥 곡소리 알림</strong>을 받아보세요!</p>
+            <p><span class="ad-badge">AD</span> |
+            월 4,900원으로 모든 광고를 제거하고 쾌적하게
+            실시간 개미방 곡소리 피드를 확인해 보세요!</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1729,44 +1814,49 @@ def render_post_list(
     list_label: str,
     post_count: int,
     post_urls: list[str] | None = None,
+    *,
+    source: str = "naver",
 ) -> None:
-    st.markdown(
-        f'<p class="post-list-title">{list_label} {post_count}개</p>',
-        unsafe_allow_html=True,
-    )
+    """토스형 곡소리 카드 타임라인 피드."""
+    badge_class = "gossip-badge-toss" if source == "toss" else "gossip-badge-naver"
+    badge_label = "토스" if source == "toss" else "네이버"
+    section_text = html.escape(f"{list_label} · {post_count}")
+
     if not titles:
+        st.markdown(
+            f'<p class="gossip-feed-section">{section_text}</p>',
+            unsafe_allow_html=True,
+        )
         st.caption("표시할 글이 없습니다.")
         return
 
     clean_titles = [str(title).strip() for title in titles]
     urls = [str(url or "").strip() for url in (post_urls or [""] * len(clean_titles))]
 
-    rows_html: list[str] = []
-    for idx, (title, url) in enumerate(zip(clean_titles, urls), 1):
+    cards_html: list[str] = []
+    for title, url in zip(clean_titles, urls):
         safe_title = html.escape(title)
         if url:
-            safe_url = html.escape(url)
-            title_cell = (
-                f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">'
-                f"{safe_title}</a>"
+            safe_url = html.escape(url, quote=True)
+            cards_html.append(
+                f'<a class="gossip-card" href="{safe_url}" '
+                f'target="_blank" rel="noopener noreferrer">'
+                f'<span class="gossip-badge {badge_class}">{badge_label}</span>'
+                f'<p class="gossip-card-title">{safe_title}</p>'
+                f"</a>"
             )
         else:
-            title_cell = safe_title
-        rows_html.append(
-            f'<tr><td class="post-no">{idx}</td>'
-            f'<td class="post-title">{title_cell}</td></tr>'
-        )
+            cards_html.append(
+                f'<div class="gossip-card gossip-card-plain">'
+                f'<span class="gossip-badge {badge_class}">{badge_label}</span>'
+                f'<p class="gossip-card-title">{safe_title}</p>'
+                f"</div>"
+            )
 
     st.markdown(
         (
-            '<div class="post-table-wrap">'
-            '<table class="post-table">'
-            '<thead><tr>'
-            '<th class="post-no-h">번호</th>'
-            '<th class="post-title-h">제목</th>'
-            "</tr></thead>"
-            f"<tbody>{''.join(rows_html)}</tbody>"
-            "</table></div>"
+            f'<p class="gossip-feed-section">{section_text}</p>'
+            f'<div class="gossip-feed-scroll">{"".join(cards_html)}</div>'
         ),
         unsafe_allow_html=True,
     )
@@ -1804,9 +1894,10 @@ def render_community_posts_panel(
     elif naver_data and naver_data.get("titles"):
         render_post_list(
             naver_data["titles"],
-            "네이버 키워드 글",
+            "네이버 곡소리",
             naver_data.get("post_count", 0),
             naver_data.get("post_urls"),
+            source="naver",
         )
     elif naver_data:
         st.caption("네이버에서 키워드 글을 찾지 못했습니다.")
@@ -1816,9 +1907,10 @@ def render_community_posts_panel(
     elif toss_data and toss_data.get("titles"):
         render_post_list(
             toss_data["titles"],
-            "토스 키워드 글",
+            "토스 곡소리",
             toss_data.get("post_count", 0),
             toss_data.get("post_urls"),
+            source="toss",
         )
     elif toss_data:
         st.caption("토스에서 키워드 글을 찾지 못했습니다.")
