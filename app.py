@@ -49,11 +49,19 @@ from stock_config import (
 )
 
 
-APP_VERSION = "20260708t"
+APP_VERSION = "20260708u"
 BACKTEST_LOOKBACK_DAYS = 30
 BACKTEST_SIM_INVESTMENT = 10_000_000
 CACHE_TTL_SECONDS = 600
 FETCH_TIMEOUT_SEC = 3
+RANKING_POST_LIMIT = 20
+RANKING_UNIVERSE_SIZE = 10
+RANKING_BUILD_BUDGET_SEC = 5
+DEFAULT_RANKING_TOP3: list[dict] = [
+    {"code": "373220", "name": "LG에너지솔루션", "score": 6, "status": "극단적 공포"},
+    {"code": "058470", "name": "리노공업", "score": 19, "status": "극단적 공포"},
+    {"code": "403870", "name": "HPSP", "score": 22, "status": "공포"},
+]
 PLOTLY_MOBILE_CONFIG: dict = {
     "scrollZoom": False,
     "displayModeBar": False,
@@ -63,7 +71,6 @@ PLOTLY_MOBILE_CONFIG: dict = {
 }
 TARGET_POST_COUNT = 100
 MAX_SCAN_PAGES = 20
-RANKING_POST_LIMIT = 40
 LEGEND_DRIP_COUNT = 3
 HANRIVER_FEAR_KEY = "hanriver_fear_votes"  # legacy — stock_votes.py 사용
 HANRIVER_GREED_KEY = "hanriver_greed_votes"
@@ -1543,7 +1550,10 @@ def render_mobile_stock_controls() -> tuple[str, str, str]:
         reset_data_cache()
         clear_backtest_cache()
         st.cache_data.clear()
+        st.session_state.pop("_ranking_warmed", None)
+        st.session_state.pop("ranking_top3_ts", None)
         st.session_state["_force_fetch"] = True
+        st.session_state["_force_ranking"] = True
         st.session_state["_ad_gate"] = True
 
     return selected_code, selected_name, selected_market
@@ -1596,24 +1606,26 @@ def _fetch_ranking_entry(stock_code: str, stock_name: str) -> dict | None:
 
 
 def _build_top3_ranking() -> list[dict]:
+    """TOP10 종목만 빠르게 스캔 — 전체 예산 5초."""
     entries: list[dict] = []
+    stocks = _get_all_top20_stocks()[:RANKING_UNIVERSE_SIZE]
+    deadline = time.monotonic() + RANKING_BUILD_BUDGET_SEC
 
-    def _worker(stock: tuple[str, str]) -> dict | None:
-        code, name = stock
-        try:
-            return _fetch_ranking_entry(code, name)
-        except Exception:
-            return None
-
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = [pool.submit(_worker, stock) for stock in _get_all_top20_stocks()]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(_fetch_ranking_entry, code, name) for code, name in stocks]
         for future in futures:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
-                result = future.result(timeout=FETCH_TIMEOUT_SEC)
+                result = future.result(timeout=max(0.05, remaining))
             except Exception:
                 result = None
             if result:
                 entries.append(result)
+
+    if not entries:
+        return list(DEFAULT_RANKING_TOP3)
 
     entries.sort(key=lambda item: item["score"])
     return entries[:3]
@@ -1624,21 +1636,38 @@ def _cached_top3_ranking(_app_version: str) -> list[dict]:
     return _build_top3_ranking()
 
 
-def render_contrarian_ranking_board() -> None:
-    """🏆 오늘의 역발상 랭킹 전광판 — 공포 점수 최저 TOP 3."""
-    backup: list[dict] = list(st.session_state.get("ranking_top3_backup") or [])
-    top3: list[dict] = backup
+def warm_ranking_top3(*, force: bool = False, allow_slow_rebuild: bool = True) -> list[dict]:
+    """랭킹 캐시 워밍 — 탭 렌더와 분리해 실시간 심리 탭 즉시 표시."""
+    backup = list(st.session_state.get("ranking_top3_backup") or DEFAULT_RANKING_TOP3)
+    last_ts = float(st.session_state.get("ranking_top3_ts", 0))
+    warmed = bool(st.session_state.get("_ranking_warmed"))
+
+    if not force and warmed and (time.time() - last_ts < CACHE_TTL_SECONDS):
+        return list(st.session_state.get("ranking_top3_backup") or backup)
+
+    if not force and not allow_slow_rebuild:
+        st.session_state.setdefault("ranking_top3_backup", backup)
+        st.session_state.setdefault("_ranking_warmed", True)
+        return list(st.session_state.get("ranking_top3_backup") or backup)
 
     try:
         fresh = _cached_top3_ranking(APP_VERSION)
         if fresh:
-            top3 = fresh
             st.session_state["ranking_top3_backup"] = fresh
+            st.session_state["ranking_top3_ts"] = time.time()
+            st.session_state["_ranking_warmed"] = True
+            return fresh
     except Exception:
-        if not backup:
-            st.caption("역발상 랭킹을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")
-            return
+        pass
 
+    st.session_state.setdefault("ranking_top3_backup", backup)
+    st.session_state["_ranking_warmed"] = True
+    return list(st.session_state.get("ranking_top3_backup") or backup)
+
+
+def render_contrarian_ranking_board() -> None:
+    """🏆 오늘의 역발상 랭킹 전광판 — 세션 백업 즉시 렌더 (크롤링 대기 없음)."""
+    top3 = list(st.session_state.get("ranking_top3_backup") or DEFAULT_RANKING_TOP3)
     if not top3:
         st.caption("역발상 랭킹 데이터가 아직 없습니다.")
         return
@@ -2153,10 +2182,15 @@ def preload_shared_data(
     stock_name: str,
     *,
     force: bool = False,
+    allow_slow_rebuild: bool = True,
 ) -> dict:
-    """탭 시작 전 — 커뮤니티·백테스트 데이터를 한 번에 준비 (로컬 변수로 반환)."""
+    """탭 시작 전 — 커뮤니티·백테스트·랭킹 데이터 선로드."""
     ensure_data(stock_code, stock_name, force=force)
     backtest_snapshot, backtest_error = fetch_backtest_snapshot(stock_code)
+    warm_ranking_top3(
+        force=force or bool(st.session_state.pop("_force_ranking", False)),
+        allow_slow_rebuild=allow_slow_rebuild,
+    )
 
     return {
         "naver_data": st.session_state.get("data_naver"),
@@ -2165,6 +2199,7 @@ def preload_shared_data(
         "toss_error": st.session_state.get("data_toss_error"),
         "backtest_snapshot": backtest_snapshot,
         "backtest_error": backtest_error,
+        "ranking_top3": st.session_state.get("ranking_top3_backup") or DEFAULT_RANKING_TOP3,
     }
 
 
@@ -2221,8 +2256,19 @@ def run_app() -> None:
         simulate_refresh_ad_gate()
 
     force_fetch = st.session_state.pop("_force_fetch", False)
-    with st.spinner("최신 시장 데이터를 분석하는 중..."):
-        shared = preload_shared_data(selected_code, selected_name, force=force_fetch)
+    cache_key = f"{APP_VERSION}:{selected_code}"
+    ranking_ready = bool(st.session_state.get("_ranking_warmed"))
+    needs_spinner = force_fetch or not _cache_is_valid(cache_key, force=force_fetch) or not ranking_ready
+
+    if needs_spinner:
+        with st.spinner("최신 시장 데이터를 분석하는 중..."):
+            shared = preload_shared_data(
+                selected_code, selected_name, force=force_fetch, allow_slow_rebuild=True
+            )
+    else:
+        shared = preload_shared_data(
+            selected_code, selected_name, force=force_fetch, allow_slow_rebuild=False
+        )
 
     naver_data = shared["naver_data"]
     toss_data = shared["toss_data"]
@@ -2268,12 +2314,12 @@ def run_app() -> None:
             st.error(f"심폐소생실방 렌더링 오류: {exc}")
 
     with tab1:
-        render_contrarian_ranking_board()
         render_main_header(selected_name, selected_code, selected_market)
         render_combined_sentiment_panel(
             naver_data, toss_data, selected_name, selected_code
         )
         render_platform_gap_panel(naver_data, toss_data, selected_name)
+        render_contrarian_ranking_board()
 
     with tab2:
         try:
